@@ -1,0 +1,30 @@
+{
+  "transcription": "This is the Automatic Shirt Wafter for hot days. The device is super easy to install and offers a hand-free way to waft your shirt. I got one to stay cool in the office, and my co-workers all seemed really impressed. Wow, that guy must really enjoy his work. Yeah, looks like it.",
+  "sentences": [
+    {
+      "index": 1,
+      "text": "This is the Automatic Shirt Wafter for hot days.",
+      "sentiment": "Positive"
+    },
+    {
+      "index": 2,
+      "text": "The device is super easy to install and offers a hand-free way to waft your shirt.",
+      "sentiment": "Positive"
+    },
+    {
+      "index": 3,
+      "text": "I got one to stay cool in the office, and my co-workers all seemed really impressed.",
+      "sentiment": "Positive"
+    },
+    {
+      "index": 4,
+      "text": "Wow, that guy must really enjoy his work.",
+      "sentiment": "Positive"
+    },
+    {
+      "index": 5,
+      "text": "Yeah, looks like it.",
+      "sentiment": "Neutral"
+    }
+  ]
+}
