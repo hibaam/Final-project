@@ -26,5 +26,16 @@
       "text": "Yeah, looks like it.",
       "sentiment": "Neutral"
     }
-  ]
+  ],
+  "summary": {
+    "Positive": {
+      "count": 4,
+      "percentage": 80.0
+    },
+    "Neutral": {
+      "count": 1,
+      "percentage": 20.0
+    }
+  },
+  "overall_sentiment": "Positive"
 }

@@ -5,14 +5,15 @@ import uuid
 import json
 from dotenv import load_dotenv
 from textblob import TextBlob
+from collections import Counter
 
-# Load environment variables (like API key)
+# Load environment variables (API key)
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def download_youtube_audio(youtube_url, output_dir="downloads"):
     """
-    Downloads the audio from a YouTube video and saves it as a uniquely named .mp3 file.
+    Downloads audio from a YouTube video and saves it as a uniquely named MP3 file.
     """
     os.makedirs(output_dir, exist_ok=True)
     unique_id = str(uuid.uuid4())
@@ -42,7 +43,7 @@ def download_youtube_audio(youtube_url, output_dir="downloads"):
 
 def transcribe_audio_with_openai(file_path):
     """
-    Sends an audio file to OpenAI Whisper and returns the transcribed text.
+    Sends an audio file to OpenAI Whisper and returns the transcription.
     """
     try:
         print(f"[…] Transcribing audio file: {file_path}")
@@ -58,6 +59,10 @@ def transcribe_audio_with_openai(file_path):
         return None
 
 def analyze_sentences(text):
+    """
+    Analyzes the sentiment of each sentence using TextBlob.
+    Returns a list of (index, sentence, sentiment).
+    """
     blob = TextBlob(text)
     results = []
 
@@ -84,22 +89,46 @@ if __name__ == "__main__":
             print("\n====== Transcription Result ======")
             print(transcription)
 
-            print("\n====== Sentence-level Sentiment Analysis ======")
+            # Analyze each sentence
             sentence_results = analyze_sentences(transcription)
 
+            # Print sentence-level results
+            print("\n====== Sentence-level Sentiment Analysis ======")
             for num, sentence, sentiment in sentence_results:
                 print(f"[{num}] {sentiment}: {sentence}")
 
-            # Prepare result JSON
+            # Generate sentiment summary
+            sentiment_counts = Counter([sentiment for _, _, sentiment in sentence_results])
+            total = sum(sentiment_counts.values())
+
+            summary = {
+                sentiment: {
+                    "count": count,
+                    "percentage": round((count / total) * 100, 1)
+                }
+                for sentiment, count in sentiment_counts.items()
+            }
+
+            overall_sentiment = max(sentiment_counts, key=sentiment_counts.get)
+
+            # Print summary in terminal
+            print("\n====== Sentiment Summary ======")
+            for sentiment, data in summary.items():
+                print(f"{sentiment}: {data['count']} sentence(s), {data['percentage']}%")
+
+            print(f"\n🎯 Overall video sentiment: {overall_sentiment}")
+
+            # Save full result to JSON
             result_data = {
                 "transcription": transcription,
                 "sentences": [
                     {"index": num, "text": sentence, "sentiment": sentiment}
                     for num, sentence, sentiment in sentence_results
-                ]
+                ],
+                "summary": summary,
+                "overall_sentiment": overall_sentiment
             }
 
-            # Save to results folder using UUID filename
             os.makedirs("results", exist_ok=True)
             json_filename = os.path.splitext(os.path.basename(audio_file))[0] + ".json"
             json_path = os.path.join("results", json_filename)
