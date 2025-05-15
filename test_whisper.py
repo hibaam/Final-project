@@ -11,9 +11,11 @@ from collections import Counter
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+
 def download_youtube_audio(youtube_url, output_dir="downloads"):
     """
-    Downloads audio from a YouTube video and saves it as a uniquely named MP3 file.
+    Downloads audio from a YouTube video and saves
+      it as a uniquely named MP3 file.
     """
     os.makedirs(output_dir, exist_ok=True)
     unique_id = str(uuid.uuid4())
@@ -41,6 +43,7 @@ def download_youtube_audio(youtube_url, output_dir="downloads"):
         print(f"[✗] Error during audio download: {e}")
         return None
 
+
 def transcribe_audio_with_openai(file_path):
     """
     Sends an audio file to OpenAI Whisper and returns the transcription.
@@ -57,6 +60,7 @@ def transcribe_audio_with_openai(file_path):
     except Exception as e:
         print(f"[✗] Error during transcription: {e}")
         return None
+
 
 def analyze_sentences(text):
     """
@@ -78,6 +82,7 @@ def analyze_sentences(text):
         results.append((i, str(sentence), sentiment))
     return results
 
+
 # Entry point
 if __name__ == "__main__":
     youtube_url = input("Enter YouTube URL: ").strip()
@@ -98,7 +103,8 @@ if __name__ == "__main__":
                 print(f"[{num}] {sentiment}: {sentence}")
 
             # Generate sentiment summary
-            sentiment_counts = Counter([sentiment for _, _, sentiment in sentence_results])
+            sentiment_counts = Counter(
+                [sentiment for _, _, sentiment in sentence_results])
             total = sum(sentiment_counts.values())
 
             summary = {
@@ -114,7 +120,10 @@ if __name__ == "__main__":
             # Print summary in terminal
             print("\n====== Sentiment Summary ======")
             for sentiment, data in summary.items():
-                print(f"{sentiment}: {data['count']} sentence(s), {data['percentage']}%")
+                print(
+                    f"{sentiment}: 
+                    {data['count']} sentence(s), {data['percentage']}%"
+                    )
 
             print(f"\n🎯 Overall video sentiment: {overall_sentiment}")
 
@@ -130,7 +139,8 @@ if __name__ == "__main__":
             }
 
             os.makedirs("results", exist_ok=True)
-            json_filename = os.path.splitext(os.path.basename(audio_file))[0] + ".json"
+            base_name = os.path.basename(audio_file)
+            json_filename = os.path.splitext(base_name)[0] + ".json"
             json_path = os.path.join("results", json_filename)
 
             with open(json_path, "w", encoding="utf-8") as f:
