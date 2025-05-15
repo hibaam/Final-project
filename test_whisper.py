@@ -6,17 +6,20 @@ import json
 from dotenv import load_dotenv
 from textblob import TextBlob
 from collections import Counter
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 # Load environment variables (API key)
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Initialize Firebase
+cred = credentials.Certificate("firebase_credentials.json")
+firebase_admin.initialize_app(cred)
+db = firestore.client()
+
 
 def download_youtube_audio(youtube_url, output_dir="downloads"):
-    """
-    Downloads audio from a YouTube video and saves
-      it as a uniquely named MP3 file.
-    """
     os.makedirs(output_dir, exist_ok=True)
     unique_id = str(uuid.uuid4())
     output_path = os.path.join(output_dir, f"audio_{unique_id}")
@@ -45,9 +48,6 @@ def download_youtube_audio(youtube_url, output_dir="downloads"):
 
 
 def transcribe_audio_with_openai(file_path):
-    """
-    Sends an audio file to OpenAI Whisper and returns the transcription.
-    """
     try:
         print(f"[…] Transcribing audio file: {file_path}")
         with open(file_path, "rb") as audio_file:
@@ -63,10 +63,6 @@ def transcribe_audio_with_openai(file_path):
 
 
 def analyze_sentences(text):
-    """
-    Analyzes the sentiment of each sentence using TextBlob.
-    Returns a list of (index, sentence, sentiment).
-    """
     blob = TextBlob(text)
     results = []
 
@@ -83,6 +79,20 @@ def analyze_sentences(text):
     return results
 
 
+def save_analysis_to_firestore(user_id, video_url, transcription, sentence_results, summary, overall):
+    doc_ref = db.collection("analyses").document()
+    doc_ref.set({
+        "user_id": user_id,
+        "video_url": video_url,
+        "transcription": transcription,
+        "sentences": sentence_results,
+        "summary": summary,
+        "overall_sentiment": overall,
+        "created_at": firestore.SERVER_TIMESTAMP
+    })
+    print(f"\n✅ Results saved to Firestore with ID: {doc_ref.id}")
+
+
 # Entry point
 if __name__ == "__main__":
     youtube_url = input("Enter YouTube URL: ").strip()
@@ -94,15 +104,12 @@ if __name__ == "__main__":
             print("\n====== Transcription Result ======")
             print(transcription)
 
-            # Analyze each sentence
             sentence_results = analyze_sentences(transcription)
 
-            # Print sentence-level results
             print("\n====== Sentence-level Sentiment Analysis ======")
             for num, sentence, sentiment in sentence_results:
                 print(f"[{num}] {sentiment}: {sentence}")
 
-            # Generate sentiment summary
             sentiment_counts = Counter(
                 [sentiment for _, _, sentiment in sentence_results])
             total = sum(sentiment_counts.values())
@@ -117,36 +124,29 @@ if __name__ == "__main__":
 
             overall_sentiment = max(sentiment_counts, key=sentiment_counts.get)
 
-            # Print summary in terminal
             print("\n====== Sentiment Summary ======")
             for sentiment, data in summary.items():
                 print(
-                    f"{sentiment}: 
-                    {data['count']} sentence(s), {data['percentage']}%"
-                    )
+                    f"{sentiment}: {data['count']} sentence(s), {data['percentage']}%"
+                )
 
             print(f"\n🎯 Overall video sentiment: {overall_sentiment}")
 
-            # Save full result to JSON
-            result_data = {
-                "transcription": transcription,
-                "sentences": [
-                    {"index": num, "text": sentence, "sentiment": sentiment}
-                    for num, sentence, sentiment in sentence_results
-                ],
-                "summary": summary,
-                "overall_sentiment": overall_sentiment
-            }
+            # Prepare data for Firestore
+            firestore_ready_sentences = [
+                {"index": num, "text": sentence, "sentiment": sentiment}
+                for num, sentence, sentiment in sentence_results
+            ]
 
-            os.makedirs("results", exist_ok=True)
-            base_name = os.path.basename(audio_file)
-            json_filename = os.path.splitext(base_name)[0] + ".json"
-            json_path = os.path.join("results", json_filename)
-
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(result_data, f, ensure_ascii=False, indent=2)
-
-            print(f"\n✅ Results saved to {json_path}")
+            # Save to Firestore (temporary test user)
+            save_analysis_to_firestore(
+                user_id="test_user",
+                video_url=youtube_url,
+                transcription=transcription,
+                sentence_results=firestore_ready_sentences,
+                summary=summary,
+                overall=overall_sentiment
+            )
 
         else:
             print("✗ Transcription failed.")

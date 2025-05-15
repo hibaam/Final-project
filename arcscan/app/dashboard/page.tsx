@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import LoginButton from '@/components/ui/LoginButton';
 
 export default function Dashboard() {
   const [videoUrl, setVideoUrl] = useState('');
@@ -51,12 +52,19 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
+      <div className="flex justify-end">
+        <LoginButton />
+      </div>
+
       <h1 className="text-3xl font-bold">Dashboard</h1>
+
       <div className="grid md:grid-cols-2 gap-8">
         <Card>
           <CardHeader>
             <CardTitle>Analyze Video</CardTitle>
-            <CardDescription>Provide a YouTube URL for transcription analysis</CardDescription>
+            <CardDescription>
+              Provide a YouTube URL for transcription analysis
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="url" className="w-full">
