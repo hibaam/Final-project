@@ -21,6 +21,7 @@
     "openai": "^4.79.2",
     "react": "^18",
     "react-dom": "^18",
+    "react-firebase-hooks": "^5.1.1",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "youtube-dl-exec": "^3.0.13"
