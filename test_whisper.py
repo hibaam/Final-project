@@ -2,38 +2,48 @@ import yt_dlp
 import openai
 import os
 import uuid
-import json
+import re
 from dotenv import load_dotenv
 from textblob import TextBlob
 from collections import Counter
 import firebase_admin
 from firebase_admin import credentials, firestore
+import subprocess
+from transformers import pipeline
 
-# Load environment variables (API key)
+# Load environment variables
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Initialize Firebase
+# Initialize Firebase Admin SDK
 cred = credentials.Certificate("firebase_credentials.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+# Load EmoRoBERTa sentiment analysis model
+emo_roberta = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment")
 
+# Convert model output labels to readable sentiment names
+label_map = {
+    "LABEL_0": "Negative",
+    "LABEL_1": "Neutral",
+    "LABEL_2": "Positive"
+}
+
+# Download and extract audio from YouTube
 def download_youtube_audio(youtube_url, output_dir="downloads"):
     os.makedirs(output_dir, exist_ok=True)
     unique_id = str(uuid.uuid4())
     output_path = os.path.join(output_dir, f"audio_{unique_id}")
-
+    
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": output_path,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
-        ],
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }],
     }
 
     try:
@@ -46,8 +56,8 @@ def download_youtube_audio(youtube_url, output_dir="downloads"):
         print(f"[✗] Error during audio download: {e}")
         return None
 
-
-def transcribe_audio_with_openai(file_path):
+# Transcribe audio using Whisper
+def transcribe_audio(file_path):
     try:
         print(f"[…] Transcribing audio file: {file_path}")
         with open(file_path, "rb") as audio_file:
@@ -61,26 +71,66 @@ def transcribe_audio_with_openai(file_path):
         print(f"[✗] Error during transcription: {e}")
         return None
 
-
+# Perform sentiment analysis for each sentence
 def analyze_sentences(text):
     blob = TextBlob(text)
+    raw_sentences = [str(sentence).strip() for sentence in blob.sentences]
+    short_sentences = [s for s in raw_sentences if len(s.split()) <= 5]
+    repeated_counts = Counter(short_sentences)
+
     results = []
 
-    for i, sentence in enumerate(blob.sentences, 1):
-        polarity = sentence.sentiment.polarity
+    for i, sentence in enumerate(raw_sentences, 1):
+        polarity = TextBlob(sentence).sentiment.polarity
+        basic_sentiment = "Neutral"
         if polarity > 0:
-            sentiment = "Positive"
+            basic_sentiment = "Positive"
         elif polarity < 0:
-            sentiment = "Negative"
-        else:
-            sentiment = "Neutral"
+            basic_sentiment = "Negative"
+        
+        if basic_sentiment == "Neutral" and len(sentence.split()) <= 5 and repeated_counts[sentence] >= 3:
+            basic_sentiment = "Positive"
 
-        results.append((i, str(sentence), sentiment))
+        try:
+            roberta_result = emo_roberta(sentence)[0]
+            final_sentiment = label_map.get(roberta_result["label"], "Neutral")
+        except Exception as e:
+            print(f"[!] EmoRoBERTa failed on sentence {i}: {e}")
+            final_sentiment = "Neutral"
+
+        results.append({
+            "index": i,
+            "text": sentence,
+            "basic_sentiment": basic_sentiment,
+            "final_sentiment": final_sentiment
+        })
+
     return results
 
+# Generate a summary and determine the overall dominant sentiment
+def calculate_summary_and_overall(sentences):
+    final_counts = Counter([s["final_sentiment"] for s in sentences])
+    total = sum(final_counts.values())
 
-def save_analysis_to_firestore(user_id, video_url, transcription, sentence_results, summary, overall):
-    doc_ref = db.collection("analyses").document()
+    summary = {
+        sentiment: {
+            "count": count,
+            "percentage": round((count / total) * 100, 1)
+        }
+        for sentiment, count in final_counts.items()
+    }
+
+    overall_sentiment = max(final_counts, key=final_counts.get)
+
+    return summary, overall_sentiment
+
+# Save all results to Firebase Firestore
+def save_to_firestore(user_id, video_url, transcription, sentence_results, summary, overall):
+    # Clean video URL to create a safe document ID
+    safe_video_id = re.sub(r'\W+', '_', video_url)
+    doc_id = f"{user_id}_{safe_video_id}"
+
+    doc_ref = db.collection("analyses").document(doc_id)
     doc_ref.set({
         "user_id": user_id,
         "video_url": video_url,
@@ -90,64 +140,34 @@ def save_analysis_to_firestore(user_id, video_url, transcription, sentence_resul
         "overall_sentiment": overall,
         "created_at": firestore.SERVER_TIMESTAMP
     })
-    print(f"\n✅ Results saved to Firestore with ID: {doc_ref.id}")
+    print(f"✅ Results saved to Firestore with ID: {doc_ref.id}")
 
-
-# Entry point
+# Run full analysis process
 if __name__ == "__main__":
+    print("Device set to use cpu")
+    print("[🔄] Checking for yt-dlp updates...")
+    subprocess.run(["yt-dlp", "-U"])
+
+    user_id = input("Enter your user ID (from Firebase Auth): ").strip()
     youtube_url = input("Enter YouTube URL: ").strip()
+
     audio_file = download_youtube_audio(youtube_url)
 
     if audio_file and os.path.exists(audio_file):
-        transcription = transcribe_audio_with_openai(audio_file)
+        transcription = transcribe_audio(audio_file)
         if transcription:
             print("\n====== Transcription Result ======")
             print(transcription)
 
             sentence_results = analyze_sentences(transcription)
+            summary, overall = calculate_summary_and_overall(sentence_results)
 
-            print("\n====== Sentence-level Sentiment Analysis ======")
-            for num, sentence, sentiment in sentence_results:
-                print(f"[{num}] {sentiment}: {sentence}")
-
-            sentiment_counts = Counter(
-                [sentiment for _, _, sentiment in sentence_results])
-            total = sum(sentiment_counts.values())
-
-            summary = {
-                sentiment: {
-                    "count": count,
-                    "percentage": round((count / total) * 100, 1)
-                }
-                for sentiment, count in sentiment_counts.items()
-            }
-
-            overall_sentiment = max(sentiment_counts, key=sentiment_counts.get)
-
-            print("\n====== Sentiment Summary ======")
+            print("\n====== Final Sentiment Summary (EmoRoBERTa) ======")
             for sentiment, data in summary.items():
-                print(
-                    f"{sentiment}: {data['count']} sentence(s), {data['percentage']}%"
-                )
+                print(f"{sentiment}: {data['count']} sentence(s), {data['percentage']}%")
+            print(f"\n🎯 Overall video sentiment: {overall}")
 
-            print(f"\n🎯 Overall video sentiment: {overall_sentiment}")
-
-            # Prepare data for Firestore
-            firestore_ready_sentences = [
-                {"index": num, "text": sentence, "sentiment": sentiment}
-                for num, sentence, sentiment in sentence_results
-            ]
-
-            # Save to Firestore (temporary test user)
-            save_analysis_to_firestore(
-                user_id="test_user",
-                video_url=youtube_url,
-                transcription=transcription,
-                sentence_results=firestore_ready_sentences,
-                summary=summary,
-                overall=overall_sentiment
-            )
-
+            save_to_firestore(user_id, youtube_url, transcription, sentence_results, summary, overall)
         else:
             print("✗ Transcription failed.")
 
