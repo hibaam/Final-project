@@ -1,57 +1,50 @@
 'use client'
 
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { auth } from '@/lib/firebaseConfig'
+import { usePathname } from 'next/navigation'
 import { useAuthState } from 'react-firebase-hooks/auth'
-import { useRouter } from 'next/navigation'
+import { auth } from '@/lib/firebaseConfig'
 
 export function DashboardNav() {
   const [user] = useAuthState(auth)
-  const router = useRouter()
-
-  const handleLogout = async () => {
-    await auth.signOut()
-    router.push('/login') 
-  }
+  const pathname = usePathname()
 
   if (!user) return null
 
+  const getPageTitle = () => {
+    if (pathname.includes('/history')) return 'History'
+    if (pathname.includes('/profile')) return 'Profile'
+    if (pathname.includes('/settings')) return 'Settings'
+    return 'ArcScan Dashboard'
+  }
+
   return (
-    <nav className="bg-white shadow-md">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          {/* site logo*/}
-          <div className="flex items-center">
-            <Link href="/dashboard" className="text-xl font-semibold text-gray-800">
-              ArcScan Dashboard
-            </Link>
+    <nav className="bg-white shadow-sm border-b border-purple-100">
+      <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+
+        {/* Left side: Title + Links */}
+        <div className="flex items-center space-x-6">
+          <div className="text-xl font-semibold text-gray-800">
+            {getPageTitle()}
           </div>
 
-          {/* movement*/}
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" asChild>
-              <Link href="/dashboard">Home</Link>
-            </Button>
-            <Button variant="ghost" asChild>
-              <Link href="/dashboard/history">History</Link>
-            </Button>
-            <Button variant="ghost" asChild>
-              <Link href="/dashboard/profile">Profile</Link>
-            </Button>
-            <Button variant="ghost" asChild>
-              <Link href="/dashboard/settings">Settings</Link>
-            </Button>
+          <Link href="/dashboard" className="text-sm text-gray-700 hover:text-purple-600 font-medium flex items-center gap-1">
+  📊 Dashboard
+</Link>
+<Link href="/dashboard/history" className="text-sm text-gray-700 hover:text-purple-600 font-medium flex items-center gap-1">
+  📚 History
+</Link>
+<Link href="/dashboard/profile" className="text-sm text-gray-700 hover:text-purple-600 font-medium flex items-center gap-1">
+  👤 Profile
+</Link>
+<Link href="/dashboard/settings" className="text-sm text-gray-700 hover:text-purple-600 font-medium flex items-center gap-1">
+  ⚙️ Settings
+</Link>
 
-            {/* email*/}
-            <span className="text-sm text-gray-600">{user.email}</span>
-
-            {/* sign out*/}
-            <Button variant="outline" onClick={handleLogout}>
-              Logout
-            </Button>
-          </div>
         </div>
+
+        {/* Right side: Email */}
+        <span className="text-sm text-gray-600">{user.email}</span>
       </div>
     </nav>
   )
