@@ -11,10 +11,12 @@ export function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md border-b border-purple-100">
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-16 relative">
         {/* Logo on the left */}
-        <div className="text-3xl	 font-extrabold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 bg-clip-text text-transparent flex items-center gap-2">
-          <span className="text-3xl">🧠</span>
-          <span>ArcScan</span>
-        </div>
+        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition">
+  <h1 className="text-3xl font-extrabold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 bg-clip-text text-transparent">
+     ArcScan
+  </h1>
+</Link>
+
 
         {/* Avatar with dropdown */}
         <div
