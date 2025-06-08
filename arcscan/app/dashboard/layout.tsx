@@ -10,21 +10,19 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Get current user and loading status using Firebase Auth
   const [user, loading] = useAuthState(auth)
 
-  // Show nothing (or you can use a spinner) while authentication is still loading
   if (loading) return null
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Display different navigation bars based on user authentication status */}
+    <div className="min-h-screen bg-white text-gray-900">
+      {/* Show either authenticated nav or guest nav */}
       {user ? <DashboardNav /> : <Navbar />}
-      
-      {/* Main page content */}
-      <main className="container mx-auto px-4 py-8">
+
+      {/* Don't force container styling — let each page control its own layout */}
+      <div className="overflow-x-hidden">
         {children}
-      </main>
+      </div>
     </div>
   )
 }
