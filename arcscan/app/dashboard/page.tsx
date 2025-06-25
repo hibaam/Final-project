@@ -81,33 +81,45 @@ const ArcScan = () => {
               strokeDasharray={`${neutralPercent * 2.51} ${(100 - neutralPercent) * 2.51}`}
               strokeDashoffset={`-${(positivePercent + negativePercent) * 2.51}`} strokeLinecap="round" />
             <defs>
+              {/* Green for positive sentiment */}
               <linearGradient id="positiveGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style={{ stopColor: '#10b981', stopOpacity: 1 }} />
-                <stop offset="100%" style={{ stopColor: '#34d399', stopOpacity: 1 }} />
+                <stop offset="0%" style={{ stopColor: '#10b981', stopOpacity: 1 }} /> {/* Darker green */}
+                <stop offset="100%" style={{ stopColor: '#34d399', stopOpacity: 1 }} /> {/* Lighter green */}
               </linearGradient>
+              {/* Red for negative sentiment */}
               <linearGradient id="negativeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style={{ stopColor: '#f97316', stopOpacity: 1 }} />
-                <stop offset="100%" style={{ stopColor: '#fb923c', stopOpacity: 1 }} />
+                <stop offset="0%" style={{ stopColor: '#ef4444', stopOpacity: 1 }} /> {/* Darker red */}
+                <stop offset="100%" style={{ stopColor: '#f87171', stopOpacity: 1 }} /> {/* Lighter red */}
               </linearGradient>
+              {/* Yellow for neutral sentiment */}
               <linearGradient id="neutralGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style={{ stopColor: '#fbbf24', stopOpacity: 1 }} />
-                <stop offset="100%" style={{ stopColor: '#fcd34d', stopOpacity: 1 }} />
+                <stop offset="0%" style={{ stopColor: '#fbbf24', stopOpacity: 1 }} /> {/* Darker yellow */}
+                <stop offset="100%" style={{ stopColor: '#fcd34d', stopOpacity: 1 }} /> {/* Lighter yellow */}
               </linearGradient>
             </defs>
           </svg>
         </div>
         <div className="space-y-4">
-          <div className="flex justify-between">
-            <span>😍 Positive</span>
-            <span>{data.positive}%</span>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full mr-2" style={{ background: 'linear-gradient(135deg, #10b981, #34d399)' }}></div>
+              <span>😍 Positive</span>
+            </div>
+            <span>{data.positive.toFixed(1)}%</span>
           </div>
-          <div className="flex justify-between">
-            <span>😡 Negative</span>
-            <span>{data.negative}%</span>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full mr-2" style={{ background: 'linear-gradient(135deg, #ef4444, #f87171)' }}></div>
+              <span>😡 Negative</span>
+            </div>
+            <span>{data.negative.toFixed(1)}%</span>
           </div>
-          <div className="flex justify-between">
-            <span>😐 Neutral</span>
-            <span>{data.neutral}%</span>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center">
+              <div className="w-3 h-3 rounded-full mr-2" style={{ background: 'linear-gradient(135deg, #fbbf24, #fcd34d)' }}></div>
+              <span>😐 Neutral</span>
+            </div>
+            <span>{data.neutral.toFixed(1)}%</span>
           </div>
         </div>
       </div>
