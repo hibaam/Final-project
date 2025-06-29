@@ -47,7 +47,7 @@ const Dashboard = () => {
     }
     
     const docId = generateDocId(videoUrl);
-    //console.log("Setting up listener for:", docId);
+    console.log("Setting up listener for:", docId);
     
     // Create the listener
     firebaseListenerRef.current = onSnapshot(
@@ -55,7 +55,7 @@ const Dashboard = () => {
       (docSnapshot) => {
         if (docSnapshot.exists()) {
           const data = docSnapshot.data();
-          //console.log("Firebase progress update:", data);
+          console.log("Firebase progress update:", data);
           
           // Update the progress state
           setProgress(data);
@@ -66,15 +66,15 @@ const Dashboard = () => {
           }
           
           // If analysis is complete, fetch the final results
-          if (data.status === 'complete' && !hasAnalyzed) {
+          if (data.status === 'complete' && !hasAnalyzed && progress?.status !== 'complete') {
             fetchFinalResults(videoUrl);
           }
         } else {
-         // console.log("No progress document found yet");
+          console.log("No progress document found yet");
         }
       },
       (err) => {
-       // console.error("Error listening to progress updates:", err);
+        console.error("Error listening to progress updates:", err);
       }
     );
   };
@@ -108,76 +108,26 @@ const Dashboard = () => {
 
   // Trigger the analysis with the backend
   const triggerAnalysis = async (videoUrl) => {
-    try {
-      // Trigger the analysis
-      const response = await fetch('http://localhost:8000/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: videoUrl,
-          user_id: user.uid,
-        }),
-      });
+  try {
+    const response = await fetch('http://localhost:8000/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: videoUrl,
+        user_id: user.uid,
+      }),
+    });
 
-      if (!response.ok) {
-        throw new Error(`API responded with status: ${response.status}`);
-      }
-
-      // Check if we got immediate results (cached analysis)
-      const data = await response.json();
-      
-      if (data.status === 'complete') {
-        // Analysis was already cached, show results immediately
-        setTranscript(data.transcription);
-        setSentenceResults(data.sentences || []);
-        setTimelineData(data.timeline_data || []);
-
-        setSentimentSummary({
-          positive: data.summary?.Positive?.percentage || 0,
-          negative: data.summary?.Negative?.percentage || 0,
-          neutral: data.summary?.Neutral?.percentage || 0,
-        });
-
-        setHasAnalyzed(true);
-        setIsAnalyzing(false);
-        setProgress(null);
-      }
-    } catch (err) {
-      console.error("❌ Error during analysis:", err);
-      setIsAnalyzing(false);
-      setProgress({ status: 'error', progress: 0, message: err.message });
-      alert(`Analysis failed: ${err.message}`);
+    if (!response.ok) {
+      throw new Error(`API responded with status: ${response.status}`);
     }
-  };
 
-  // Fetch final analysis results
-  const fetchFinalResults = async (videoUrl) => {
-    // Prevent multiple fetches
-    if (hasAnalyzed) {
-      console.log("Results already fetched, skipping redundant request");
-      return;
-    }
-    
-    try {
-      const response = await fetch('http://localhost:8000/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: videoUrl,
-          user_id: user.uid,
-        }),
-      });
+    const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(`API responded with status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
+    if (data.status === 'complete') {
+      // Analysis was already cached, show results immediately
       setTranscript(data.transcription);
       setSentenceResults(data.sentences || []);
       setTimelineData(data.timeline_data || []);
@@ -188,17 +138,57 @@ const Dashboard = () => {
         neutral: data.summary?.Neutral?.percentage || 0,
       });
 
-      // Set analyzed to true first to prevent race conditions
       setHasAnalyzed(true);
       setIsAnalyzing(false);
-      setProgress(null);
-      setPartialResults(null);
-    } catch (err) {
-      console.error("❌ Error fetching final results:", err);
-      setIsAnalyzing(false);
-      alert(`Failed to fetch results: ${err.message}`);
+
+      // Force progress UI to consider analysis complete
+      setProgress({ status: 'complete', progress: 100, message: 'Analysis already completed' });
     }
-  };
+  } catch (err) {
+    console.error("❌ Error during analysis:", err);
+    setIsAnalyzing(false);
+    setProgress({ status: 'error', progress: 0, message: err.message });
+    alert(`Analysis failed: ${err.message}`);
+  }
+};
+
+
+  // Fetch final analysis results
+  const fetchFinalResults = async (videoUrl) => {
+  if (hasAnalyzed) {
+    console.log("Results already fetched, skipping redundant request");
+    return;
+  }
+  
+  try {
+    const response = await fetch(`http://localhost:8000/results/${encodeURIComponent(videoUrl)}`);
+    if (!response.ok) {
+      throw new Error(`API responded with status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    setTranscript(data.transcription);
+    setSentenceResults(data.sentences || []);
+    setTimelineData(data.timeline_data || []);
+
+    setSentimentSummary({
+      positive: data.summary?.Positive?.percentage || 0,
+      negative: data.summary?.Negative?.percentage || 0,
+      neutral: data.summary?.Neutral?.percentage || 0,
+    });
+
+    setHasAnalyzed(true);
+    setIsAnalyzing(false);
+    setProgress(null);
+    setPartialResults(null);
+  } catch (err) {
+    console.error("❌ Error fetching final results:", err);
+    setIsAnalyzing(false);
+    alert(`Failed to fetch results: ${err.message}`);
+  }
+};
+
 
   // Handle analyze request
   const handleAnalyze = async () => {

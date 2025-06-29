@@ -330,3 +330,10 @@ async def get_user_history(user_id: str):
     for doc in docs:
         results.append(doc.to_dict())
     return results
+
+@app.get("/results/{video_url:path}")
+async def get_results(video_url: str):
+    existing = check_existing_analysis_by_video(video_url)
+    if existing:
+        return existing
+    raise HTTPException(status_code=404, detail="Analysis not found")
