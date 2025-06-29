@@ -1,5 +1,3 @@
-
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -61,7 +59,7 @@ def check_existing_analysis_by_video(video_url):
     return None
 
 # Save analysis to Firestore
-def save_analysis(user_id, video_url, transcription, sentence_results, summary, overall, timeline_data):
+def save_analysis(user_id, video_url, transcription, sentence_results, summary, overall, timeline_data, status="complete"):
     doc_id = generate_doc_id(video_url)
     db.collection("analyses").document(doc_id).set({
         "user_id": user_id,
@@ -70,8 +68,21 @@ def save_analysis(user_id, video_url, transcription, sentence_results, summary, 
         "sentences": sentence_results,
         "summary": summary,
         "overall_sentiment": overall,
-        "timeline_data": timeline_data,  # Add timeline data
+        "timeline_data": timeline_data,
+        "status": status,
         "created_at": firestore.SERVER_TIMESTAMP
+    })
+
+# Update progress in Firestore
+def update_progress(video_url, user_id, status, progress, message=""):
+    doc_id = generate_doc_id(video_url)
+    db.collection("analysis_progress").document(doc_id).set({
+        "user_id": user_id,
+        "video_url": video_url,
+        "status": status,
+        "progress": progress,
+        "message": message,
+        "updated_at": firestore.SERVER_TIMESTAMP
     })
 
 # Download audio from YouTube
@@ -95,7 +106,7 @@ def download_youtube_audio(youtube_url, output_dir="downloads"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Download error: {e}")
 
-# Transcribe audio to text using Whisper with timestamps
+# Transcribe audio to text using Whisper
 def transcribe_audio(path):
     try:
         with open(path, "rb") as f:
@@ -222,48 +233,95 @@ def summarize_results(sentences):
 # Main endpoint to analyze video
 @app.post("/analyze")
 async def analyze(req: AnalyzeRequest):
+    # Check if analysis already exists
     existing = check_existing_analysis_by_video(req.url)
     if existing:
         return existing
 
-    audio_file = download_youtube_audio(req.url)
-    if not os.path.exists(audio_file):
-        raise HTTPException(status_code=404, detail="Audio file missing.")
+    # Create a progress entry
+    doc_id = generate_doc_id(req.url)
+    update_progress(req.url, req.user_id, "starting", 5, "Starting analysis...")
 
-    # Transcribe with timestamps
-    whisper_response = transcribe_audio(audio_file)
-    
-    # Extract sentences with timestamps
-    sentences = extract_sentences_with_timestamps(whisper_response)
-    
-    # Extract the full transcription text
-    text = " ".join([s["text"] for s in sentences])
-    
-    # Analyze each sentence
-    analysis = analyze_sentences(sentences)
-    
-    # Create timeline data with smoothing
-    timeline_data = apply_smoothing(analysis)
-    
-    # Summarize results
-    summary, overall = summarize_results(analysis)
-    
-    # Save to database
-    save_analysis(req.user_id, req.url, text, analysis, summary, overall, timeline_data)
-    
-    # Clean up
-    os.remove(audio_file)
+    try:
+        # 1. Download audio
+        update_progress(req.url, req.user_id, "downloading", 10, "Downloading audio from YouTube...")
+        audio_file = download_youtube_audio(req.url)
+        update_progress(req.url, req.user_id, "downloaded", 20, "Audio downloaded successfully!")
+        
+        # 2. Transcribe audio
+        update_progress(req.url, req.user_id, "transcribing", 30, "Converting speech to text...")
+        whisper_response = transcribe_audio(audio_file)
+        text = whisper_response.get("text", "")
+        
+        # Extract sentences with timestamps
+        sentences = extract_sentences_with_timestamps(whisper_response)
+        
+        # Save partial result with just transcription
+        save_analysis(
+            req.user_id, req.url, text, [], {}, "", [], "transcribed"
+        )
+        
+        update_progress(req.url, req.user_id, "transcribed", 50, "Speech successfully converted to text!")
+        
+        # 3. Analyze sentences
+        update_progress(req.url, req.user_id, "analyzing", 60, "Analyzing emotional content...")
+        analysis = analyze_sentences(sentences)
+        
+        # 4. Create timeline
+        update_progress(req.url, req.user_id, "creating_timeline", 80, "Building sentiment timeline...")
+        timeline_data = apply_smoothing(analysis)
+        
+        # 5. Summarize results
+        update_progress(req.url, req.user_id, "summarizing", 90, "Creating emotional summary...")
+        summary, overall = summarize_results(analysis)
+        
+        # Save complete analysis
+        save_analysis(
+            req.user_id, req.url, text, analysis, summary, overall, timeline_data
+        )
+        
+        update_progress(req.url, req.user_id, "complete", 100, "Analysis complete!")
+        
+        # Clean up
+        os.remove(audio_file)
 
-    return {
-        "user_id": req.user_id,
-        "video_url": req.url,
-        "transcription": text,
-        "sentences": analysis,
-        "summary": summary,
-        "overall_sentiment": overall,
-        "timeline_data": timeline_data
-    }
-
+        return {
+            "user_id": req.user_id,
+            "video_url": req.url,
+            "transcription": text,
+            "sentences": analysis,
+            "summary": summary,
+            "overall_sentiment": overall,
+            "timeline_data": timeline_data,
+            "status": "complete"
+        }
+    except Exception as e:
+        update_progress(req.url, req.user_id, "error", 0, f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+# Get analysis progress - FIXED to handle full URLs
+@app.get("/progress/{video_url:path}")
+async def get_progress(video_url: str):
+    try:
+        from urllib.parse import unquote
+        decoded_url = unquote(video_url)
+        print(f"Getting progress for URL: {decoded_url}")  # Add debug logging
+        
+        doc_id = generate_doc_id(decoded_url)
+        print(f"Generated doc_id: {doc_id}")  # Add debug logging
+        
+        doc_ref = db.collection("analysis_progress").document(doc_id).get()
+        
+        if doc_ref.exists:
+            progress_data = doc_ref.to_dict()
+            print(f"Progress found: {progress_data}")  # Add debug logging
+            return progress_data
+        else:
+            print("No progress found, returning not_started")  # Add debug logging
+            return {"status": "not_started", "progress": 0}
+    except Exception as e:
+        print(f"Error getting progress: {e}")
+        return {"status": "error", "progress": 0, "message": str(e)}
+    
 # Get all analyses done by a specific user
 @app.get("/history/{user_id}")
 async def get_user_history(user_id: str):
