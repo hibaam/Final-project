@@ -9,6 +9,8 @@ import SentimentTimeline from '@/components/SentimentTimeline';
 import AnalysisProgress from '@/components/AnalysisProgress';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebaseConfig';
+import AdvancedEmotions from '@/components/AdvancedEmotions';
+
 
 const Dashboard = () => {
   const [videoUrl, setVideoUrl] = useState('');
@@ -420,6 +422,12 @@ const Dashboard = () => {
                 Analyze Another Video
               </button>
             </div>
+            <div className="my-10 border-t border-gray-200"></div>
+
+<AdvancedEmotions 
+  videoUrl={videoUrl} 
+  userId={user?.uid} 
+/>
           </div>
         )}
       </div>
