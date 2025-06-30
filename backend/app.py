@@ -10,7 +10,7 @@ import uuid
 import re
 import firebase_admin
 from firebase_admin import credentials, firestore
-from textblob import TextBlob
+#from textblob import TextBlob
 from collections import Counter
 from transformers import pipeline as transformers_pipeline
 
@@ -33,9 +33,13 @@ label_map = {
 
 # Define core emotions to track (based on Plutchik's wheel of emotions)
 CORE_EMOTIONS = [
-     "admiration", "approval", "neutral", "optimism", 
+     "admiration", "approval", "neutral", "optimism",
     "confusion", "joy", "sadness", "anger",
-    "fear", "surprise", "disgust", "trust"
+    "fear", "surprise", "disgust", "trust",
+    "anticipation", "gratitude", "caring", "realization",
+    "curiosity", "excitement", "pride", "amusement",
+    "nervousness", "disappointment", "disapproval",
+    "relief", "grief", "love", "annoyance"
 ]
 
 # Initialize FastAPI
