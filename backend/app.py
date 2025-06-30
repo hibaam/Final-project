@@ -12,6 +12,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from textblob import TextBlob
 from collections import Counter
+from transformers import pipeline as transformers_pipeline
 
 # Load environment variables
 load_dotenv()
@@ -29,6 +30,13 @@ label_map = {
     "LABEL_1": "Neutral",
     "LABEL_2": "Positive"
 }
+
+# Define core emotions to track (based on Plutchik's wheel of emotions)
+CORE_EMOTIONS = [
+     "admiration", "approval", "neutral", "optimism", 
+    "confusion", "joy", "sadness", "anger",
+    "fear", "surprise", "disgust", "trust"
+]
 
 # Initialize FastAPI
 app = FastAPI()
@@ -337,3 +345,238 @@ async def get_results(video_url: str):
     if existing:
         return existing
     raise HTTPException(status_code=404, detail="Analysis not found")
+
+
+# ------ ADVANCED EMOTIONS ANALYSIS - NEW CODE STARTS HERE -------
+
+#Function to analyze complex emotions using GoEmotions model
+def analyze_advanced_emotions(sentences):
+    # Initialize the model only when needed (to save memory)
+    emotion_classifier = transformers_pipeline(
+        "text-classification",
+        model="monologg/bert-base-cased-goemotions-original",
+        return_all_scores=True
+    )
+    results = []
+    for sentence in sentences:
+        text = sentence["text"]
+        if len(text.split()) < 3:
+            continue
+        try:
+            emotion_scores = emotion_classifier(text)[0]
+            emotions_dict = {item['label']: item['score'] for item in emotion_scores}
+            top_emotions = sorted(emotions_dict.items(), key=lambda x: x[1], reverse=True)[:3]
+            formatted_emotions = [
+                {"emotion": emotion, "score": round(score * 100, 1)}
+                for emotion, score in top_emotions if score > 0.1
+            ]
+            results.append({
+                "text": text,
+                "start_time": sentence["start_time"],
+                "end_time": sentence["end_time"],
+                "emotions": formatted_emotions
+            })
+        except Exception as e:
+            print(f"Error analyzing advanced emotions: {e}")
+            continue
+    return results
+
+# Create an emotion timeline for visualization
+def create_emotion_timeline(results, window_size=5):
+    # First, identify which emotions are actually present in the data
+    detected_emotions = set()
+    for result in results:
+        for emotion_data in result["emotions"]:
+            detected_emotions.add(emotion_data["emotion"])
+    
+    # Use detected emotions plus core emotions
+    tracked_emotions = list(detected_emotions.union(set(CORE_EMOTIONS)))
+    
+    # Initialize timeline
+    timeline = []
+    
+    # Get total duration of video
+    if not results:
+        return []
+    total_duration = max(r["end_time"] for r in results)
+    
+    # Create initial data structure with time points
+    for t in range(int(total_duration) + 1):
+        data_point = {"time": t}
+        for emotion in tracked_emotions:
+            data_point[emotion] = 0
+        timeline.append(data_point)
+    
+    # Fill in emotion values for each second
+    for result in results:
+        start = int(result["start_time"])
+        end = int(result["end_time"])
+        
+        for emotion_data in result["emotions"]:
+            emotion = emotion_data["emotion"]
+            score = emotion_data["score"] / 100  # Convert percentage back to 0-1 scale
+            
+            # Apply score to each second in the time range
+            for t in range(start, end + 1):
+                if t < len(timeline):
+                    timeline[t][emotion] += score
+    
+    # Apply smoothing
+    smoothed_timeline = []
+    for i in range(len(timeline)):
+        window_start = max(0, i - window_size // 2)
+        window_end = min(len(timeline), i + window_size // 2 + 1)
+        window = timeline[window_start:window_end]
+        
+        smoothed_point = {"time": timeline[i]["time"]}
+        for emotion in tracked_emotions:
+            values = [point.get(emotion, 0) for point in window]
+            if values:
+                smoothed_point[emotion] = sum(values) / len(values)
+            else:
+                smoothed_point[emotion] = 0
+                
+        smoothed_timeline.append(smoothed_point)
+    
+    return smoothed_timeline
+
+# Summarize emotions across the video
+def summarize_emotions(results):
+    if not results:
+        return {}
+
+    # Collect all emotions with their scores
+    all_emotions = []
+    for result in results:
+        for emotion_data in result["emotions"]:
+            all_emotions.append({
+                "emotion": emotion_data["emotion"],
+                "score": emotion_data["score"],
+                "duration": result["end_time"] - result["start_time"]
+            })
+
+    # Group by emotion
+    emotion_groups = {}
+    for item in all_emotions:
+        emotion = item["emotion"]
+        if emotion not in emotion_groups:
+            emotion_groups[emotion] = []
+        emotion_groups[emotion].append(item)
+
+    # Calculate weighted average scores (by duration)
+    summary = {}
+    for emotion, items in emotion_groups.items():
+        total_score = sum(item["score"] * item["duration"] for item in items)
+        total_duration = sum(item["duration"] for item in items)
+        
+        if total_duration > 0:
+            weighted_score = total_score / total_duration
+        else:
+            weighted_score = 0
+        
+        # Only include if significant
+        if weighted_score > 5:  # 5% threshold
+            summary[emotion] = {
+                "average_score": round(weighted_score, 1),
+                "occurrences": len(items)
+            }
+
+    return summary
+
+# Add a new endpoint for complex emotions
+@app.post("/analyze/advanced-emotions")
+async def analyze_advanced(req: AnalyzeRequest):
+    # First check if basic analysis exists
+    doc_id = generate_doc_id(req.url)
+    doc_ref = db.collection("analyses").document(doc_id).get()
+    if not doc_ref.exists:
+        raise HTTPException(status_code=404, detail="Basic analysis not found. Run basic analysis first.")
+    
+    basic_analysis = doc_ref.to_dict()
+
+    # Check if advanced analysis already exists
+    advanced_ref = db.collection("advanced_analyses").document(doc_id).get()
+    if advanced_ref.exists:
+        return advanced_ref.to_dict()
+
+    try:
+        # Get sentences from basic analysis
+        sentences = basic_analysis.get("sentences", [])
+        
+        # Extract just the text and timing info for processing
+        sentence_data = [
+            {"text": s["text"], "start_time": s["start_time"], "end_time": s["end_time"]} 
+            for s in sentences
+        ]
+        
+        update_progress(req.url, req.user_id, "analyzing_advanced", 10, "Analyzing complex emotions...")
+        
+        # Perform advanced emotion analysis
+        advanced_results = analyze_advanced_emotions(sentence_data)
+        
+        # Extract emotion timeline for visualization
+        emotion_timeline = create_emotion_timeline(advanced_results)
+        
+        # Summarize dominant emotions
+        emotion_summary = summarize_emotions(advanced_results)
+        
+        # Save results
+        db.collection("advanced_analyses").document(doc_id).set({
+            "user_id": req.user_id,
+            "video_url": req.url,
+            "sentence_emotions": advanced_results,
+            "emotion_timeline": emotion_timeline,
+            "emotion_summary": emotion_summary,
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+        
+        update_progress(req.url, req.user_id, "complete_advanced", 100, "Advanced emotion analysis complete!")
+        
+        return {
+            "user_id": req.user_id,
+            "video_url": req.url,
+            "sentence_emotions": advanced_results,
+            "emotion_timeline": emotion_timeline,
+            "emotion_summary": emotion_summary
+        }
+    except Exception as e:
+        update_progress(req.url, req.user_id, "error_advanced", 0, f"Error in advanced analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Add this endpoint to check advanced analysis progress
+@app.get("/progress/advanced/{video_url:path}")
+async def get_advanced_progress(video_url: str):
+    try:
+        from urllib.parse import unquote
+        decoded_url = unquote(video_url)
+        doc_id = generate_doc_id(decoded_url)
+        
+        # First check if analysis exists
+        advanced_ref = db.collection("advanced_analyses").document(doc_id).get()
+        if advanced_ref.exists:
+            return {"status": "complete", "progress": 100}
+        
+        # Check progress
+        doc_ref = db.collection("analysis_progress").document(doc_id).get()
+        
+        if doc_ref.exists:
+            progress_data = doc_ref.to_dict()
+            # Only return if it's advanced progress
+            if progress_data.get("status", "").startswith("analyzing_advanced") or progress_data.get("status", "").startswith("complete_advanced"):
+                return progress_data
+            
+        return {"status": "not_started", "progress": 0}
+    except Exception as e:
+        return {"status": "error", "progress": 0, "message": str(e)}
+
+
+# Add this endpoint to get advanced results
+@app.get("/results/advanced/{video_url:path}")
+async def get_advanced_results(video_url: str):
+    doc_id = generate_doc_id(video_url)
+    doc_ref = db.collection("advanced_analyses").document(doc_id).get()
+    if doc_ref.exists:
+        return doc_ref.to_dict()
+    
+    raise HTTPException(status_code=404, detail="Advanced analysis not found")
+
