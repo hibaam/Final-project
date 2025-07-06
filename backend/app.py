@@ -583,4 +583,3 @@ async def get_advanced_results(video_url: str):
         return doc_ref.to_dict()
     
     raise HTTPException(status_code=404, detail="Advanced analysis not found")
-
