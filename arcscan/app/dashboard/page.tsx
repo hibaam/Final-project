@@ -417,7 +417,6 @@ const Dashboard = () => {
   videoUrl={videoUrl} 
   userId={user?.uid} 
 />
-            
             <div className="text-center mt-4">
               <button
                 onClick={resetAnalysis}
