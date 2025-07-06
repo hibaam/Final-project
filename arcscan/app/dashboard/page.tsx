@@ -413,6 +413,10 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
+            <AdvancedEmotions 
+  videoUrl={videoUrl} 
+  userId={user?.uid} 
+/>
             
             <div className="text-center mt-4">
               <button
@@ -423,11 +427,6 @@ const Dashboard = () => {
               </button>
             </div>
             <div className="my-10 border-t border-gray-200"></div>
-
-<AdvancedEmotions 
-  videoUrl={videoUrl} 
-  userId={user?.uid} 
-/>
           </div>
         )}
       </div>
