@@ -31,12 +31,11 @@ const EMOTION_COLORS = {
   grief: '#708090',          // Slate Gray
   love: '#FF1493',           // Deep Pink
   nervousness: '#FF8C00',    // Dark Orange
-  relief: '#3CB371',          // Medium Sea Blue
-  curiosity: '#40E0D0',   // Turquoise
-  excitement: '#FF8C00',  // Dark Orange - 
-pride: '#8B0000',       // Dark Red - 
-amusement: '#FF69B4'    // Hot Pink - 
-
+  relief: '#3CB371',         // Medium Sea Blue
+  curiosity: '#40E0D0',      // Turquoise
+  excitement: '#FF8C00',     // Dark Orange 
+  pride: '#8B0000',          // Dark Red
+  amusement: '#FF69B4'       // Hot Pink
 }
 
 export default function AdvancedEmotions({ videoUrl, userId }) {
@@ -135,11 +134,13 @@ export default function AdvancedEmotions({ videoUrl, userId }) {
   const preparePieData = () => {
     if (!advancedData?.emotion_summary) return []
     
-    return Object.entries(advancedData.emotion_summary).map(([emotion, data]) => ({
-      name: emotion,
-      value: data.average_score,
-      count: data.occurrences
-    }))
+    return Object.entries(advancedData.emotion_summary)
+      .sort((a, b) => b[1].occurrences - a[1].occurrences) // Sort by occurrences
+      .map(([emotion, data]) => ({
+        name: emotion,
+        value: data.average_score,
+        count: data.occurrences
+      }))
   }
 
   return (
@@ -217,50 +218,49 @@ export default function AdvancedEmotions({ videoUrl, userId }) {
           
           {/* Timeline View */}
          {activeTab === 'timeline' && (
-  <div className="h-96">
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={advancedData.emotion_timeline}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis 
-          dataKey="time" 
-          tickFormatter={formatTime}
-          label={{ value: 'Time (MM:SS)', position: 'insideBottom', offset: -5 }}
-        />
-        <YAxis label={{ value: 'Intensity', angle: -90, position: 'insideLeft' }} />
-        <Tooltip
-          formatter={(value, name) => [
-            `${(value * 100).toFixed(1)}%`, 
-            name.charAt(0).toUpperCase() + name.slice(1)
-          ]}
-          labelFormatter={(value) => `Time: ${formatTime(value)}`}
-        />
-        <Legend />
-        {/* Dynamically render only detected emotions with data */}
-        {Object.keys(advancedData.emotion_timeline[0] || {})
-          .filter(key => key !== 'time')
-          .map((emotion) => {
-            const hasData = advancedData.emotion_timeline.some(point => point[emotion] > 0.01);
-            if (!hasData) return null;
+            <div className="h-96">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={advancedData.emotion_timeline}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="time" 
+                    tickFormatter={formatTime}
+                    label={{ value: 'Time (MM:SS)', position: 'insideBottom', offset: -5 }}
+                  />
+                  <YAxis label={{ value: 'Intensity', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip
+                    formatter={(value, name) => [
+                      `${(value * 100).toFixed(1)}%`, 
+                      name.charAt(0).toUpperCase() + name.slice(1)
+                    ]}
+                    labelFormatter={(value) => `Time: ${formatTime(value)}`}
+                  />
+                  <Legend />
+                  {/* Dynamically render only detected emotions with data */}
+                  {Object.keys(advancedData.emotion_timeline[0] || {})
+                    .filter(key => key !== 'time')
+                    .map((emotion) => {
+                      const hasData = advancedData.emotion_timeline.some(point => point[emotion] > 0.01);
+                      if (!hasData) return null;
 
-            const color = EMOTION_COLORS[emotion] || 
-              `#${Math.floor(Math.random()*16777215).toString(16)}`;
+                      const color = EMOTION_COLORS[emotion] || 
+                        `#${Math.floor(Math.random()*16777215).toString(16)}`;
 
-            return (
-              <Line
-                key={emotion}
-                type="monotone"
-                dataKey={emotion}
-                stroke={color}
-                activeDot={{ r: 8 }}
-                strokeWidth={2}
-                name={emotion.charAt(0).toUpperCase() + emotion.slice(1)}
-              />
-            );
-          })}
-      </LineChart>
-    </ResponsiveContainer>
-  </div>
-
+                      return (
+                        <Line
+                          key={emotion}
+                          type="monotone"
+                          dataKey={emotion}
+                          stroke={color}
+                          activeDot={{ r: 8 }}
+                          strokeWidth={2}
+                          name={emotion.charAt(0).toUpperCase() + emotion.slice(1)}
+                        />
+                      );
+                    })}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           )}
           
           {/* Summary View */}
@@ -299,31 +299,34 @@ export default function AdvancedEmotions({ videoUrl, userId }) {
               <div className="w-full md:w-1/2 p-4">
                 <h4 className="text-xl font-bold mb-4">Emotional Profile</h4>
                 <div className="space-y-3">
-                  {Object.entries(advancedData.emotion_summary || {}).sort((a, b) => 
-                    b[1].average_score - a[1].average_score
-                  ).map(([emotion, data]) => (
-                    <div key={emotion} className="flex items-center">
-                      <div 
-                        className="w-4 h-4 rounded-full mr-2" 
-                        style={{ backgroundColor: EMOTION_COLORS[emotion] || '#CCCCCC' }}
-                      ></div>
-                      <div className="flex-1">
-                        <div className="flex justify-between">
-                          <span className="font-medium capitalize">{emotion}</span>
-                          <span>{data.average_score}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                          <div 
-                            className="h-2 rounded-full" 
-                            style={{ 
-                              width: `${data.average_score}%`, 
-                              backgroundColor: EMOTION_COLORS[emotion] || '#CCCCCC' 
-                            }}
-                          ></div>
+                  {Object.entries(advancedData.emotion_summary || {})
+                    .sort((a, b) => b[1].occurrences - a[1].occurrences) // Sort by occurrences instead of score
+                    .map(([emotion, data]) => (
+                      <div key={emotion} className="flex items-center">
+                        <div 
+                          className="w-4 h-4 rounded-full mr-2" 
+                          style={{ backgroundColor: EMOTION_COLORS[emotion] || '#CCCCCC' }}
+                        ></div>
+                        <div className="flex-1">
+                          <div className="flex justify-between">
+                            <span className="font-medium capitalize">{emotion}</span>
+                            <span>{data.average_score}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                            <div 
+                              className="h-2 rounded-full" 
+                              style={{ 
+                                width: `${data.average_score}%`, 
+                                backgroundColor: EMOTION_COLORS[emotion] || '#CCCCCC' 
+                              }}
+                            ></div>
+                          </div>
+                          <div className="text-sm text-gray-500 mt-1">
+                            Detected {data.occurrences} {data.occurrences === 1 ? 'time' : 'times'}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </div>
             </div>
