@@ -351,55 +351,46 @@ const Dashboard = () => {
               </div>
               
               <div className="space-y-6">
-                <div className="bg-white rounded-xl shadow-md p-4">
-                  <h2 className="text-xl font-semibold mb-2">🤗 Sentiment Summary</h2>
-                  <div className="flex justify-center">
-                    <div className="relative w-40 h-40">
-                      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                        <circle 
-                          cx="50" cy="50" r="40" fill="none" stroke="#10b981" strokeWidth="18"
-                          strokeDasharray={`${sentimentSummary.positive * 2.51} ${(100 - sentimentSummary.positive) * 2.51}`} 
-                          strokeLinecap="round" 
-                        />
-                        <circle 
-                          cx="50" cy="50" r="40" fill="none" stroke="#ef4444" strokeWidth="18"
-                          strokeDasharray={`${sentimentSummary.negative * 2.51} ${(100 - sentimentSummary.negative) * 2.51}`}
-                          strokeDashoffset={`-${sentimentSummary.positive * 2.51}`} 
-                          strokeLinecap="round" 
-                        />
-                        <circle 
-                          cx="50" cy="50" r="40" fill="none" stroke="#fbbf24" strokeWidth="18"
-                          strokeDasharray={`${sentimentSummary.neutral * 2.51} ${(100 - sentimentSummary.neutral) * 2.51}`}
-                          strokeDashoffset={`-${(sentimentSummary.positive + sentimentSummary.negative) * 2.51}`} 
-                          strokeLinecap="round" 
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="space-y-2 mt-4 text-sm">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 rounded-full mr-2 bg-green-500"></div>
-                        <span>😀 Positive</span>
-                      </div>
-                      <span>{sentimentSummary.positive.toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 rounded-full mr-2 bg-red-500"></div>
-                        <span>😡 Negative</span>
-                      </div>
-                      <span>{sentimentSummary.negative.toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 rounded-full mr-2 bg-yellow-500"></div>
-                        <span>😐 Neutral</span>
-                      </div>
-                      <span>{sentimentSummary.neutral.toFixed(1)}%</span>
-                    </div>
-                  </div>
-                </div>
+               <div className="bg-white rounded-xl shadow-md p-4">
+  <h2 className="text-xl font-semibold mb-3">🤗 Sentiment Summary</h2>
+  
+  {Object.entries({
+    "Positive": sentimentSummary.positive,
+    "Negative": sentimentSummary.negative,
+    "Neutral": sentimentSummary.neutral
+  })
+    .sort((a, b) => b[1] - a[1])
+    .map(([sentiment, value]) => {
+      const color = 
+        sentiment === "Positive" ? "#16a34a" : // Blue
+        sentiment === "Negative" ? "#dc2626" : // Orange
+        "#8075ff";                            // Purple for Neutral
+        
+      const emoji = 
+        sentiment === "Positive" ? "😀" : 
+        sentiment === "Negative" ? "😟" : 
+        "😐";
+        
+      return (
+        <div key={sentiment} className="mb-3">
+          <div className="text-base font-medium mb-1">
+            {emoji} {sentiment}
+          </div>
+          <div 
+            className="h-8 rounded text-white font-bold flex items-center px-3"
+            style={{ 
+              width: `${value}%`, 
+              backgroundColor: color,
+              minWidth: '60px'
+            }}
+          >
+            {value.toFixed(1)}%
+          </div>
+        </div>
+      );
+    })
+  }
+</div>
 
                 {/* Replace the original transcript component with TranslatedTranscript */}
                 <TranslatedTranscript 
