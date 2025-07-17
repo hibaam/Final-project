@@ -13,6 +13,8 @@ from firebase_admin import credentials, firestore
 #from textblob import TextBlob
 from collections import Counter
 from transformers import pipeline as transformers_pipeline
+from langdetect import detect
+from googletrans import Translator
 
 # Load environment variables
 load_dotenv()
@@ -22,6 +24,9 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 cred = credentials.Certificate("firebase_credentials.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
+
+# Initialize the translator
+translator = Translator()
 
 # Setup EmoRoBERTa
 emo_roberta = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment")
@@ -57,6 +62,7 @@ app.add_middleware(
 class AnalyzeRequest(BaseModel):
     url: str
     user_id: str
+    translated: bool = False  # Optional flag to use translated text for analysis
 
 # Generate safe document ID based on video URL only
 def generate_doc_id(video_url):
@@ -73,7 +79,7 @@ def check_existing_analysis_by_video(video_url):
 # Save analysis to Firestore
 def save_analysis(user_id, video_url, transcription, sentence_results, summary, overall, timeline_data, status="complete"):
     doc_id = generate_doc_id(video_url)
-    db.collection("analyses").document(doc_id).set({
+    data = {
         "user_id": user_id,
         "video_url": video_url,
         "transcription": transcription,
@@ -83,7 +89,15 @@ def save_analysis(user_id, video_url, transcription, sentence_results, summary, 
         "timeline_data": timeline_data,
         "status": status,
         "created_at": firestore.SERVER_TIMESTAMP
-    })
+    }
+    
+    # If we have original text information from translation
+    if isinstance(transcription, dict) and "original_text" in transcription:
+        data["original_text"] = transcription.get("original_text")
+        data["translated_text"] = transcription.get("translated_text")
+        data["detected_language"] = transcription.get("detected_language")
+    
+    db.collection("analyses").document(doc_id).set(data)
 
 # Update progress in Firestore
 def update_progress(video_url, user_id, status, progress, message=""):
@@ -119,6 +133,8 @@ def download_youtube_audio(youtube_url, output_dir="downloads"):
         raise HTTPException(status_code=500, detail=f"Download error: {e}")
 
 # Transcribe audio to text using Whisper
+# A more optimized version that reduces API calls by batching segments
+
 def transcribe_audio(path):
     try:
         with open(path, "rb") as f:
@@ -128,6 +144,87 @@ def transcribe_audio(path):
                 response_format="verbose_json",  # Get detailed output with timestamps
                 timestamp_granularities=["segment"]  # Get segment-level timestamps
             )
+        
+        # Get the transcribed text
+        text = result.get("text", "")
+        
+        # Only detect and translate if there's text
+        if text:
+            try:
+                # Detect language
+                detected_lang = detect(text)
+                
+                # Only translate Hebrew or Arabic
+                if detected_lang in ['he', 'ar']:
+                    # Store original text and language
+                    original_text = text
+                    original_lang = detected_lang
+                    
+                    # Use GPT for translation
+                    translation_response = openai.ChatCompletion.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": f"You are a professional translator from {detected_lang} to English. Translate the following text accurately while preserving the meaning and tone:"},
+                            {"role": "user", "content": text}
+                        ],
+                        temperature=0.3  # Lower temperature for more accurate translations
+                    )
+                    
+                    # Extract translated text from response
+                    translated_text = translation_response.choices[0].message['content'].strip()
+                    
+                    # Store the translated text in the result
+                    result["original_text"] = original_text
+                    result["translated_text"] = translated_text
+                    result["detected_language"] = detected_lang
+                    
+                    # Replace the text with translated version for analysis
+                    result["text"] = translated_text
+                    
+                    # Batch translate segments to reduce API calls
+                    # Group segments into batches of 10
+                    segments = result.get("segments", [])
+                    batch_size = 10
+                    for i in range(0, len(segments), batch_size):
+                        batch = segments[i:i+batch_size]
+                        
+                        # Skip empty segments
+                        if not batch:
+                            continue
+                            
+                        # Create a numbered list of segments for translation
+                        segment_texts = [f"{j+1}. {seg.get('text', '').strip()}" for j, seg in enumerate(batch)]
+                        combined_text = "\n".join(segment_texts)
+                        
+                        # Translate the batch
+                        batch_translation = openai.ChatCompletion.create(
+                            model="gpt-3.5-turbo",
+                            messages=[
+                                {"role": "system", "content": f"You are a professional translator from {detected_lang} to English. Translate each numbered segment below from {detected_lang} to English. Keep the same numbering format in your response (1., 2., etc.) and translate each segment on its own line:"},
+                                {"role": "user", "content": combined_text}
+                            ],
+                            temperature=0.3
+                        )
+                        
+                        # Parse the translated segments
+                        translated_batch = batch_translation.choices[0].message['content'].strip()
+                        translated_lines = translated_batch.split('\n')
+                        
+                        # Update each segment with its translation
+                        for j, seg in enumerate(batch):
+                            # Find the corresponding translated line
+                            for line in translated_lines:
+                                if line.startswith(f"{j+1}."):
+                                    # Extract translation (remove the numbering)
+                                    translation = line[line.find(".")+1:].strip()
+                                    seg["original_text"] = seg.get("text", "")
+                                    seg["text"] = translation
+                                    break
+            except Exception as e:
+                # If translation fails, just continue with original text
+                print(f"Translation error: {e}")
+                pass
+        
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription error: {e}")
@@ -260,10 +357,24 @@ async def analyze(req: AnalyzeRequest):
         audio_file = download_youtube_audio(req.url)
         update_progress(req.url, req.user_id, "downloaded", 20, "Audio downloaded successfully!")
         
-        # 2. Transcribe audio
+        # 2. Transcribe audio (now with translation for Hebrew/Arabic)
         update_progress(req.url, req.user_id, "transcribing", 30, "Converting speech to text...")
         whisper_response = transcribe_audio(audio_file)
+        
+        # Get the transcribed text
         text = whisper_response.get("text", "")
+        
+        # Check if we have a translation
+        has_translation = isinstance(whisper_response, dict) and "translated_text" in whisper_response
+        
+        # Store translation information
+        translation_info = {}
+        if has_translation:
+            translation_info = {
+                "original_text": whisper_response.get("original_text"),
+                "translated_text": whisper_response.get("translated_text"),
+                "detected_language": whisper_response.get("detected_language")
+            }
         
         # Extract sentences with timestamps
         sentences = extract_sentences_with_timestamps(whisper_response)
@@ -297,7 +408,8 @@ async def analyze(req: AnalyzeRequest):
         # Clean up
         os.remove(audio_file)
 
-        return {
+        # Create response data
+        response_data = {
             "user_id": req.user_id,
             "video_url": req.url,
             "transcription": text,
@@ -307,6 +419,12 @@ async def analyze(req: AnalyzeRequest):
             "timeline_data": timeline_data,
             "status": "complete"
         }
+        
+        # Add translation info if available
+        if translation_info:
+            response_data.update(translation_info)
+            
+        return response_data
     except Exception as e:
         update_progress(req.url, req.user_id, "error", 0, f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -507,11 +625,34 @@ async def analyze_advanced(req: AnalyzeRequest):
         # Get sentences from basic analysis
         sentences = basic_analysis.get("sentences", [])
         
+        # Check if we should use translated text
+        use_translated = req.translated and "translated_text" in basic_analysis
+        
         # Extract just the text and timing info for processing
-        sentence_data = [
-            {"text": s["text"], "start_time": s["start_time"], "end_time": s["end_time"]} 
-            for s in sentences
-        ]
+        if use_translated:
+            # For non-English videos, use the translated text for analysis
+            sentence_data = []
+            for s in sentences:
+                # Get translated text if available, otherwise use original
+                text_to_use = basic_analysis.get("translated_text", basic_analysis.get("transcription", ""))
+                
+                # Since the translated text is a single block, use the original text
+                # just for timing information
+                sentence_data.append({
+                    "text": text_to_use,
+                    "start_time": s["start_time"], 
+                    "end_time": s["end_time"]
+                })
+        else:
+            # For English videos, use the original text
+            sentence_data = [
+                {
+                    "text": s["text"], 
+                    "start_time": s["start_time"], 
+                    "end_time": s["end_time"]
+                } 
+                for s in sentences
+            ]
         
         update_progress(req.url, req.user_id, "analyzing_advanced", 10, "Analyzing complex emotions...")
         
@@ -546,7 +687,6 @@ async def analyze_advanced(req: AnalyzeRequest):
     except Exception as e:
         update_progress(req.url, req.user_id, "error_advanced", 0, f"Error in advanced analysis: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 # Add this endpoint to check advanced analysis progress
 @app.get("/progress/advanced/{video_url:path}")
 async def get_advanced_progress(video_url: str):
