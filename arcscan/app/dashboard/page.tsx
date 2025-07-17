@@ -10,7 +10,7 @@ import AnalysisProgress from '@/components/AnalysisProgress';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebaseConfig';
 import AdvancedEmotions from '@/components/AdvancedEmotions';
-
+import TranslatedTranscript from '@/components/TranslatedTranscript';
 
 const Dashboard = () => {
   const [videoUrl, setVideoUrl] = useState('');
@@ -27,6 +27,11 @@ const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [user] = useAuthState(auth);
   const youtubePlayerRef = useRef(null);
+  
+  // Add translation state variables
+  const [originalText, setOriginalText] = useState('');
+  const [translatedText, setTranslatedText] = useState('');
+  const [detectedLanguage, setDetectedLanguage] = useState(null);
   
   // Progress tracking states
   const [progress, setProgress] = useState({ status: "starting", progress: 5, message: "Starting analysis..." });
@@ -110,29 +115,82 @@ const Dashboard = () => {
 
   // Trigger the analysis with the backend
   const triggerAnalysis = async (videoUrl) => {
-  try {
-    const response = await fetch('http://localhost:8000/analyze', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: videoUrl,
-        user_id: user.uid,
-      }),
-    });
+    try {
+      const response = await fetch('http://localhost:8000/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: videoUrl,
+          user_id: user.uid,
+        }),
+      });
 
-    if (!response.ok) {
-      throw new Error(`API responded with status: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`API responded with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.status === 'complete') {
+        // Analysis was already cached, show results immediately
+        setTranscript(data.transcription);
+        setSentenceResults(data.sentences || []);
+        setTimelineData(data.timeline_data || []);
+        
+        // Set translation data if available
+        if (data.original_text && data.translated_text) {
+          setOriginalText(data.original_text);
+          setTranslatedText(data.translated_text);
+          setDetectedLanguage(data.detected_language);
+        }
+
+        setSentimentSummary({
+          positive: data.summary?.Positive?.percentage || 0,
+          negative: data.summary?.Negative?.percentage || 0,
+          neutral: data.summary?.Neutral?.percentage || 0,
+        });
+
+        setHasAnalyzed(true);
+        setIsAnalyzing(false);
+
+        // Force progress UI to consider analysis complete
+        setProgress({ status: 'complete', progress: 100, message: 'Analysis already completed' });
+      }
+    } catch (err) {
+      console.error("❌ Error during analysis:", err);
+      setIsAnalyzing(false);
+      setProgress({ status: 'error', progress: 0, message: err.message });
+      alert(`Analysis failed: ${err.message}`);
     }
+  };
 
-    const data = await response.json();
+  // Fetch final analysis results
+  const fetchFinalResults = async (videoUrl) => {
+    if (hasAnalyzed) {
+      console.log("Results already fetched, skipping redundant request");
+      return;
+    }
+    
+    try {
+      const response = await fetch(`http://localhost:8000/results/${encodeURIComponent(videoUrl)}`);
+      if (!response.ok) {
+        throw new Error(`API responded with status: ${response.status}`);
+      }
 
-    if (data.status === 'complete') {
-      // Analysis was already cached, show results immediately
+      const data = await response.json();
+
       setTranscript(data.transcription);
       setSentenceResults(data.sentences || []);
       setTimelineData(data.timeline_data || []);
+
+      // Set translation data if available
+      if (data.original_text && data.translated_text) {
+        setOriginalText(data.original_text);
+        setTranslatedText(data.translated_text);
+        setDetectedLanguage(data.detected_language);
+      }
 
       setSentimentSummary({
         positive: data.summary?.Positive?.percentage || 0,
@@ -142,55 +200,14 @@ const Dashboard = () => {
 
       setHasAnalyzed(true);
       setIsAnalyzing(false);
-
-      // Force progress UI to consider analysis complete
-      setProgress({ status: 'complete', progress: 100, message: 'Analysis already completed' });
+      setProgress(null);
+      setPartialResults(null);
+    } catch (err) {
+      console.error("❌ Error fetching final results:", err);
+      setIsAnalyzing(false);
+      alert(`Failed to fetch results: ${err.message}`);
     }
-  } catch (err) {
-    console.error("❌ Error during analysis:", err);
-    setIsAnalyzing(false);
-    setProgress({ status: 'error', progress: 0, message: err.message });
-    alert(`Analysis failed: ${err.message}`);
-  }
-};
-
-
-  // Fetch final analysis results
-  const fetchFinalResults = async (videoUrl) => {
-  if (hasAnalyzed) {
-    console.log("Results already fetched, skipping redundant request");
-    return;
-  }
-  
-  try {
-    const response = await fetch(`http://localhost:8000/results/${encodeURIComponent(videoUrl)}`);
-    if (!response.ok) {
-      throw new Error(`API responded with status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    setTranscript(data.transcription);
-    setSentenceResults(data.sentences || []);
-    setTimelineData(data.timeline_data || []);
-
-    setSentimentSummary({
-      positive: data.summary?.Positive?.percentage || 0,
-      negative: data.summary?.Negative?.percentage || 0,
-      neutral: data.summary?.Neutral?.percentage || 0,
-    });
-
-    setHasAnalyzed(true);
-    setIsAnalyzing(false);
-    setProgress(null);
-    setPartialResults(null);
-  } catch (err) {
-    console.error("❌ Error fetching final results:", err);
-    setIsAnalyzing(false);
-    alert(`Failed to fetch results: ${err.message}`);
-  }
-};
-
+  };
 
   // Handle analyze request
   const handleAnalyze = async () => {
@@ -255,6 +272,9 @@ const Dashboard = () => {
     setTimelineData([]);
     setProgress(null);
     setPartialResults(null);
+    setOriginalText('');
+    setTranslatedText('');
+    setDetectedLanguage(null);
     setSentimentSummary({ positive: 0, negative: 0, neutral: 0 });
   };
 
@@ -381,42 +401,21 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-md p-4">
-                  <h2 className="text-xl font-semibold mb-2">📝 Transcript</h2>
-                  <div className="max-h-[calc(100vh-24rem)] overflow-y-auto text-sm">
-                    {sentenceResults.map((sentence, index) => (
-                      <span
-                        key={index}
-                        className={`inline transition-colors duration-200 cursor-pointer hover:bg-opacity-40 ${
-                          activeSentence && activeSentence.index === sentence.index 
-                            ? 'bg-blue-100 rounded' 
-                            : ''
-                        }`}
-                        style={{ 
-                          backgroundColor: activeSentence && activeSentence.index === sentence.index 
-                            ? 'rgba(59, 130, 246, 0.2)' 
-                            : getSentimentColor(sentence.final_sentiment)
-                        }}
-                        onClick={() => {
-                          if (youtubePlayerRef.current) {
-                            youtubePlayerRef.current.seekTo(sentence.start_time);
-                          }
-                        }}
-                      >
-                        {sentence.text}{' '}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500">
-                    Click on any sentence to jump to that point in the video
-                  </div>
-                </div>
+                {/* Replace the original transcript component with TranslatedTranscript */}
+                <TranslatedTranscript 
+                  sentenceResults={sentenceResults}
+                  activeSentence={activeSentence}
+                  youtubePlayerRef={youtubePlayerRef}
+                  originalText={originalText}
+                  translatedText={translatedText}
+                  detectedLanguage={detectedLanguage}
+                />
               </div>
             </div>
             <AdvancedEmotions 
-  videoUrl={videoUrl} 
-  userId={user?.uid} 
-/>
+              videoUrl={videoUrl} 
+              userId={user?.uid} 
+            />
             <div className="text-center mt-4">
               <button
                 onClick={resetAnalysis}
