@@ -57,7 +57,11 @@ export default function AdvancedEmotions({ videoUrl, userId }) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url: videoUrl, user_id: userId }),
+        body: JSON.stringify({ 
+          url: videoUrl, 
+          user_id: userId,
+          translated: true // Flag to tell backend to use translated text if available
+        }),
       })
       
       if (!response.ok) {
