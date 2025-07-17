@@ -14,7 +14,7 @@ from firebase_admin import credentials, firestore
 from collections import Counter
 from transformers import pipeline as transformers_pipeline
 from langdetect import detect
-from googletrans import Translator
+#from googletrans import Translator
 
 # Load environment variables
 load_dotenv()
@@ -26,7 +26,7 @@ firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # Initialize the translator
-translator = Translator()
+#translator = Translator()
 
 # Setup EmoRoBERTa
 emo_roberta = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment")
