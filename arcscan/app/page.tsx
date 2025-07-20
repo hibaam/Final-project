@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
+import logo from './logo.png' // ✅ لأن logo.png في نفس مجلد page.tsx
 import { useEffect, useRef, useState } from 'react'
 
 // الإيموجي العائمة
@@ -61,8 +63,15 @@ export default function Home() {
       <header className="fixed top-0 left-0 w-full z-50 bg-white/90 backdrop-blur-md shadow">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-extrabold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 bg-clip-text text-transparent flex items-center gap-2">
-            🧠 ArcScan
-          </h1>
+  <Image 
+    src={logo} 
+    alt="ArcScan Logo" 
+    className="h-12 w-auto"
+    priority 
+  />
+  ArcScan
+</h1>
+
           <nav className="hidden md:flex space-x-8 text-gray-800 font-medium">
             <a href="#features" className="hover:text-purple-600">Features</a>
             <a href="#about" className="hover:text-purple-600">About</a>

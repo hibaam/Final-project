@@ -7,6 +7,9 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata = {
   title: 'ArcScan - Video Analysis Platform',
   description: 'Analyze videos and YouTube links with advanced AI technology',
+ icons: {
+    icon: '/icon.png', // This explicitly tells Next.js to use icon.png
+  },
 }
 
 export default function RootLayout({

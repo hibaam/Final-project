@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { User, LogOut, Settings, UserCircle2 } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
+import logo from '/app/logo.png' // ✅ الاستيراد الصحيح لصورة من داخل app/
 
 export function Navbar() {
   const [showMenu, setShowMenu] = useState(false)
@@ -10,13 +12,19 @@ export function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md border-b border-purple-100">
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-16 relative">
+
         {/* Logo on the left */}
         <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition">
-  <h1 className="text-3xl font-extrabold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 bg-clip-text text-transparent">
-     ArcScan
-  </h1>
-</Link>
-
+          <Image 
+            src={logo} 
+            alt="ArcScan Logo" 
+            className="h-16 w-auto"
+            priority 
+          />
+          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 bg-clip-text text-transparent">
+            ArcScan
+          </h1>
+        </Link>
 
         {/* Avatar with dropdown */}
         <div
@@ -37,7 +45,7 @@ export function Navbar() {
                 <Settings className="w-4 h-4" /> Settings
               </Link>
               <button
-                onClick={() => alert('Logging out...')} // لاحقًا نربطه فعليًا مع auth
+                onClick={() => alert('Logging out...')}
                 className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
               >
                 <LogOut className="w-4 h-4" /> Logout
