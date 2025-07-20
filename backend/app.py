@@ -380,9 +380,14 @@ async def analyze(req: AnalyzeRequest):
         sentences = extract_sentences_with_timestamps(whisper_response)
         
         # Save partial result with just transcription
-        save_analysis(
-            req.user_id, req.url, text, [], {}, "", [], "transcribed"
-        )
+        if has_translation:
+            save_analysis(
+                req.user_id, req.url, whisper_response, [], {}, "", [], "transcribed"
+            )
+        else:
+            save_analysis(
+                req.user_id, req.url, text, [], {}, "", [], "transcribed"
+            )
         
         update_progress(req.url, req.user_id, "transcribed", 50, "Speech successfully converted to text!")
         
@@ -399,9 +404,14 @@ async def analyze(req: AnalyzeRequest):
         summary, overall = summarize_results(analysis)
         
         # Save complete analysis
-        save_analysis(
-            req.user_id, req.url, text, analysis, summary, overall, timeline_data
-        )
+        if has_translation:
+            save_analysis(
+                req.user_id, req.url, whisper_response, analysis, summary, overall, timeline_data
+            )
+        else:
+            save_analysis(
+                req.user_id, req.url, text, analysis, summary, overall, timeline_data
+            )
         
         update_progress(req.url, req.user_id, "complete", 100, "Analysis complete!")
         
