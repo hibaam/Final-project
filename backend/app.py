@@ -15,6 +15,8 @@ from collections import Counter
 from transformers import pipeline as transformers_pipeline
 from langdetect import detect
 #from googletrans import Translator
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
 
 # Load environment variables
 load_dotenv()
@@ -65,8 +67,19 @@ class AnalyzeRequest(BaseModel):
     translated: bool = False  # Optional flag to use translated text for analysis
 
 # Generate safe document ID based on video URL only
+
+def clean_video_url(video_url: str) -> str:
+    """Remove time markers and keep a clean video URL."""
+    parsed = urlparse(video_url)
+    query = parse_qs(parsed.query)
+    query.pop("t", None)  # remove time parameter if exists
+    cleaned_query = urlencode(query, doseq=True)
+    clean_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, cleaned_query, parsed.fragment))
+    return clean_url
+
 def generate_doc_id(video_url):
-    return re.sub(r'\W+', '_', video_url)
+    clean_url = clean_video_url(video_url)
+    return re.sub(r'\W+', '_', clean_url)
 
 # Check if analysis for this video already exists
 def check_existing_analysis_by_video(video_url):
