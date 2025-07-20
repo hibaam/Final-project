@@ -1,6 +1,9 @@
 {
   "dependencies": {
     "chart.js": "^4.5.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
+    "pdfmake": "^0.2.20",
     "recharts": "^3.0.2"
   }
 }

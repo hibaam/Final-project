@@ -11,6 +11,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebaseConfig';
 import AdvancedEmotions from '@/components/AdvancedEmotions';
 import TranslatedTranscript from '@/components/TranslatedTranscript';
+import PDFExportButton from '@/components/PDFExportButton';
 
 const Dashboard = () => {
   const [videoUrl, setVideoUrl] = useState('');
@@ -351,6 +352,7 @@ const Dashboard = () => {
               </div>
               
               <div className="space-y-6">
+                
                <div className="bg-white rounded-xl shadow-md p-4">
   <h2 className="text-xl font-semibold mb-3">🤗 Sentiment Summary</h2>
   
@@ -407,6 +409,24 @@ const Dashboard = () => {
               videoUrl={videoUrl} 
               userId={user?.uid} 
             />
+             {/* PDF Export Button - Add this new section */}
+            <div className="text-center mt-8">
+              <PDFExportButton 
+                videoUrl={videoUrl}
+                sentimentSummary={{
+                  positive: sentimentSummary.positive,
+                  negative: sentimentSummary.negative,
+                  neutral: sentimentSummary.neutral
+                }}
+                timelineData={timelineData}
+                sentenceResults={sentenceResults}
+                advancedData={partialResults}
+                originalText={originalText}
+                translatedText={translatedText}
+                detectedLanguage={detectedLanguage}
+              />
+            </div>
+            {/* End PDF Export Button section */}
             <div className="text-center mt-4">
               <button
                 onClick={resetAnalysis}
