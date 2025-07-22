@@ -4,78 +4,86 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup, sendEmailVerification } from 'firebase/auth'
 import { auth, db } from '@/lib/firebaseConfig'
 import { doc, setDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
+import { FcGoogle } from 'react-icons/fc'
 
 export default function Register() {
   const router = useRouter()
-
-  // This state holds the form input values (name, email, password)
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-  })
-
-  // A loading flag to disable the form while waiting for async operations
+  const [formData, setFormData] = useState({ name: '', email: '', password: '' })
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
-  // Handles input field changes and updates formData state accordingly
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
-    setFormData(prevState => ({
-      ...prevState,
-      [name]: value,
-    }))
+    setFormData(prevState => ({ ...prevState, [name]: value }))
   }
 
-  // Handles form submission and triggers user registration logic
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError('')
+    setSuccess('')
 
     try {
-      // Step 1: Create a new user in Firebase Authentication
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      )
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password)
       const user = userCredential.user
 
-      // Step 2: Update the displayName field in Firebase user profile
-      await updateProfile(user, {
-        displayName: formData.name,
-      })
+      await updateProfile(user, { displayName: formData.name })
 
-      // Step 3: Store user data in Firestore under "users" collection
       await setDoc(doc(db, 'users', user.uid), {
         name: formData.name,
         email: formData.email,
-        createdAt: new Date(), // Timestamp of account creation
+        createdAt: new Date(),
       })
 
-      // Step 4: Navigate to the dashboard page after successful registration
-      router.push('/dashboard')
-    } catch (error: any) {
-      // If any error occurs during the signup process, display an alert
+      await sendEmailVerification(user)
+
+router.push('verify')    } catch (error: any) {
       console.error('Signup error:', error)
-      alert(error.message || 'Signup failed')
+      setError(error.message || 'Signup failed')
     } finally {
-      // Re-enable the form by setting loading to false
       setLoading(false)
     }
   }
 
-  // JSX for the registration form UI
+  const handleGoogleSignup = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const provider = new GoogleAuthProvider()
+      const result = await signInWithPopup(auth, provider)
+      const user = result.user
+
+      await setDoc(doc(db, 'users', user.uid), {
+        name: user.displayName,
+        email: user.email,
+        createdAt: new Date(),
+      })
+
+      router.push('/dashboard')
+    } catch (err: any) {
+      console.error('Google signup error:', err)
+      setError(err.message || 'Google signup failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="container mx-auto px-4 py-16">
-      <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
-        <h1 className="text-3xl font-bold mb-6 text-center">Register</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 px-4">
+      <div className="max-w-md w-full bg-white/90 backdrop-blur shadow-xl rounded-2xl p-8">
+        <h1 className="text-3xl font-extrabold text-center text-purple-600 mb-2">Create an Account</h1>
+<p className="text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 mb-6 text-base font-medium">
+  Join ArcScan and start analyzing emotions in your videos today!
+</p>
+        {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+        {success && <p className="text-green-600 text-sm mb-4 text-center">{success}</p>}
+
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name field */}
           <div>
             <Label htmlFor="name">Name</Label>
             <Input
@@ -88,7 +96,6 @@ export default function Register() {
             />
           </div>
 
-          {/* Email field */}
           <div>
             <Label htmlFor="email">Email</Label>
             <Input
@@ -101,7 +108,6 @@ export default function Register() {
             />
           </div>
 
-          {/* Password field */}
           <div>
             <Label htmlFor="password">Password</Label>
             <Input
@@ -114,11 +120,31 @@ export default function Register() {
             />
           </div>
 
-          {/* Submit button */}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button
+            type="submit"
+            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold hover:from-purple-600 hover:to-pink-600"
+            disabled={loading}
+          >
             {loading ? 'Registering...' : 'Register'}
           </Button>
         </form>
+
+        <div className="mt-6">
+          <Button
+            onClick={handleGoogleSignup}
+            className="w-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-2"
+            disabled={loading}
+          >
+            <FcGoogle className="text-xl" /> Continue with Google
+          </Button>
+        </div>
+
+        <p className="text-center text-sm text-gray-600 mt-6">
+          Already have an account?{' '}
+          <a href="/login" className="text-purple-600 hover:underline">
+            Log in here
+          </a>
+        </p>
       </div>
     </div>
   )
