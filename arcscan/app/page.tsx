@@ -95,11 +95,11 @@ export default function Home() {
                 Start Analyzing
               </button>
             </Link>
-            <Link href="/dashboard/history">
-              <button className="bg-white/20 text-white font-semibold px-6 py-3 rounded-full border border-white hover:bg-white/30 transition">
-                View History
-              </button>
-            </Link>
+           <Link href="/login">
+  <button className="bg-white/20 text-white font-semibold px-6 py-3 rounded-full border border-white hover:bg-white/30 transition">
+    Sign in
+  </button>
+</Link>
           </div>
         </div>
       </section>
